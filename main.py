@@ -105,7 +105,7 @@ for i_episode in itertools.count(1):
 
         # Ignore the "done" signal if it comes from hitting the time horizon.
         # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
-        mask = 1 if episode_steps == env.max_episode_steps else float(not done)
+        mask = 1 if episode_steps == env.max_episode_step else float(not done)
         # print("mask: ", done)
         memory.push(state, action, reward, next_state, mask) # Append transition to memory
 
@@ -121,22 +121,22 @@ for i_episode in itertools.count(1):
     if i_episode % 10 == 0 and args.eval is True:
         avg_reward = 0.
         episodes = 10
-        for _  in range(episodes):
+        # env.render_init()
+        env.render_flag = True
+        for _ in range(episodes):
             state = env.reset()
             episode_reward = 0
             done = False
-            while not done:
+            while not done:               
+                env.render_save()
                 action = agent.select_action(state, evaluate=True)
-                # env.render(mode='human')
                 next_state, reward, done, _ = env.step(action)
                 episode_reward += reward
-
-
                 state = next_state
             avg_reward += episode_reward
+        env.render_activate()   # Only for the last episode
         avg_reward /= episodes
-
-
+        env.render_flag = False
         writer.add_scalar('avg_reward/test', avg_reward, i_episode)
 
         print("----------------------------------------")
