@@ -15,7 +15,7 @@ class UnicycleEnv(gym.Env):
         super(UnicycleEnv, self).__init__()
         self.dynamiuc_mode = 'Unicycle'
         
-        self.action_space = spaces.Box(low=-3, high=3, shape=(2,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-4, high=4, shape=(2,), dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e10, high=1e10, shape=(7,), dtype=np.float32)
         
         self.dt = 0.02
@@ -38,14 +38,15 @@ class UnicycleEnv(gym.Env):
         rand = rand_init
         # 10 secind per circle is the base speed
         if rand:
-            self.circle_r = random.uniform(1, 3)
+            # self.circle_r = random.uniform(1, 3)
+            self.circle_r = 2
             self.speed = 2 / self.circle_r
             self.initial_angle = random.uniform(0, 2 * np.pi)
-            self.state = np.array([self.circle_r * np.cos(self.initial_angle), self.circle_r * np.sin(self.initial_angle), 0])
+            self.state = np.array([self.circle_r * np.cos(self.initial_angle), self.circle_r * np.sin(self.initial_angle), random.uniform(0, 2 * np.pi)])
             self.goal_pos = [self.circle_r * np.cos(self.initial_angle), self.circle_r * np.sin(self.initial_angle)]
         else:
             self.goal_pos = [2, 0]
-            self.state = np.array([2., 0., 0.])
+            self.state = np.array([2., 0., np.pi/2.])
             self.initial_angle = 0
             self.speed = 1
             self.circle_r = 2
@@ -59,8 +60,9 @@ class UnicycleEnv(gym.Env):
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         # Update the state
+        # With disturbance
         self.state += self.dt * (self.get_f(self.state) + self.get_g(self.state) @ action)
-        self.state -= self.dt * -0.1 * self.get_g(self.state) @ np.array([np.cos(self.state[2]),  0]) #* np.random.multivariate_normal(self.disturb_mean, self.disturb_covar, 1).squeeze()
+        self.state -= self.dt * -0.1 * self.get_g(self.state) @ np.array([np.cos(self.state[2]),  0]) * np.random.multivariate_normal(self.disturb_mean, self.disturb_covar, 1).squeeze()
         self.episode_step += 1
         
         # Get info to satisfy the gym interface
@@ -74,7 +76,7 @@ class UnicycleEnv(gym.Env):
         self.goal_pos = [self.circle_r * np.cos(self.speed * np.pi/5 * self.episode_step * self.dt + self.initial_angle), self.circle_r * np.sin(self.speed * np.pi/5 * self.episode_step * self.dt + self.initial_angle)]
         
         # Check if the episode is done
-        done = self.episode_step >= 1000
+        done = self.episode_step >= 2000
         
         return self.get_obs(), reward, done, info  
     
