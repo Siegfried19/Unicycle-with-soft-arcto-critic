@@ -11,20 +11,20 @@ from matplotlib.animation import FuncAnimation
 class UnicycleEnv(gym.Env):
     matadata = {'render.modes': ['human']}
     
-    def __init__(self, rand_init=True):
+    def __init__(self):
         super(UnicycleEnv, self).__init__()
         self.dynamiuc_mode = 'Unicycle'
         
-        self.action_space = spaces.Box(low=-2, high=2, shape=(2,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-3, high=3, shape=(2,), dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e10, high=1e10, shape=(7,), dtype=np.float32)
         
         self.dt = 0.02
         self.max_episode_step = 5000
+        # self.reward_goal = 1.0
         
         self.goal_pos = None
         self.episode_step = 0
         
-        self.rand_init = rand_init
         self.render_flag = False
         
         self.reset()
@@ -33,19 +33,23 @@ class UnicycleEnv(gym.Env):
         self.disturb_mean = np.zeros((3,))
         self.disturb_covar = np.diag([0.005, 0.005, 0.05]) * 20
   
-    def reset(self):
+    def reset(self, rand_init=True):
         self.episode_step = 0
-        self.state = np.array([0., 0., 0.])
+        rand = rand_init
         # 10 secind per circle is the base speed
-        if self.rand_init:
-            self.circle_r = random.uniform(1, 2.5)
-            self.speed = 1 * random.uniform(1, 2.5)
-            circle_angle = random.uniform(0, 2 * np.pi)
-            self.goal_pos = [self.circle_r * np.cos(circle_angle), self.circle_r * np.sin(circle_angle)]
+        if rand:
+            self.circle_r = random.uniform(1, 3)
+            self.speed = 2 / self.circle_r
+            self.initial_angle = random.uniform(0, 2 * np.pi)
+            self.state = np.array([self.circle_r * np.cos(self.initial_angle), self.circle_r * np.sin(self.initial_angle), 0])
+            self.goal_pos = [self.circle_r * np.cos(self.initial_angle), self.circle_r * np.sin(self.initial_angle)]
         else:
-            self.goal_pos = [1, 0]
+            self.goal_pos = [2, 0]
+            self.state = np.array([2., 0., 0.])
+            self.initial_angle = 0
             self.speed = 1
-        self.last_goal_dist = self._goal_dist()
+            self.circle_r = 2
+        # self.last_goal_dist = self._goal_dist()
         
         if self.render_flag:
             self.render_start()
@@ -62,11 +66,12 @@ class UnicycleEnv(gym.Env):
         # Get info to satisfy the gym interface
         info = dict()
         
-        # Get the reward
-        self.goal_pos = [self.circle_r * np.cos(self.speed * np.pi/5 * self.episode_step * self.dt), self.circle_r * np.sin(self.speed * np.pi/5 * self.episode_step * self.dt)]
-        dist_goal = self._goal_dist()
-        reward = self.last_goal_dist - dist_goal
-        self.last_goal_dist = dist_goal
+        # Get the reward 
+        reward = - self._goal_dist()
+        # if self._goal_dist() < 0.05:
+        #     reward += self.reward_goal
+        # self.last_goal_dist = dist_goal
+        self.goal_pos = [self.circle_r * np.cos(self.speed * np.pi/5 * self.episode_step * self.dt + self.initial_angle), self.circle_r * np.sin(self.speed * np.pi/5 * self.episode_step * self.dt + self.initial_angle)]
         
         # Check if the episode is done
         done = self.episode_step >= 1000
@@ -90,8 +95,8 @@ class UnicycleEnv(gym.Env):
     
     def render_start(self):
         self.fig, self.ax = plt.subplots()
-        self.ax.set_xlim(-3, 3)
-        self.ax.set_ylim(-3, 3)
+        self.ax.set_xlim(-4, 4)
+        self.ax.set_ylim(-4, 4)
         self.ax.set_aspect('equal')
         
         circle_inner = plt.Circle((0, 0), self.circle_r, color='black', fill=False, linestyle='--',linewidth=1)
@@ -139,7 +144,8 @@ class UnicycleEnv(gym.Env):
         
         ani = FuncAnimation(self.fig, self.update, frames=np.linspace(0, len(self.x_robot)-1, len(self.x_robot)),init_func=self.init, blit=True, interval=1000/24)
         ani.save(filename, fps=24, extra_args=['-vcodec', 'libx264'])
-        plt.close(self.fig)    
+        plt.close(self.fig)  
+        plt.close('all')  
            
         
     # Get the distance between the current position and the goal position

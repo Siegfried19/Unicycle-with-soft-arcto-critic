@@ -20,7 +20,7 @@ parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                     help='discount factor for reward (default: 0.99)')
 parser.add_argument('--tau', type=float, default=0.005, metavar='G',
                     help='target smoothing coefficient(τ) (default: 0.005)')
-parser.add_argument('--lr', type=float, default=0.0003, metavar='G',
+parser.add_argument('--lr', type=float, default=0.0009, metavar='G',
                     help='learning rate (default: 0.0003)')
 parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
                     help='Temperature parameter α determines the relative importance of the entropy\
@@ -97,7 +97,6 @@ for i_episode in itertools.count(1):
                 writer.add_scalar('loss/entropy_loss', ent_loss, updates)
                 writer.add_scalar('entropy_temprature/alpha', alpha, updates)
                 updates += 1
-
         next_state, reward, done, _ = env.step(action) # Step
         episode_steps += 1
         total_numsteps += 1
@@ -124,7 +123,7 @@ for i_episode in itertools.count(1):
         # env.render_init()
         env.render_flag = True
         for _ in range(episodes):
-            state = env.reset()
+            state = env.reset(rand_init=False)
             episode_reward = 0
             done = False
             while not done:               
