@@ -109,8 +109,8 @@ class SAC(object):
 
     # Save model parameters
     def save_checkpoint(self, env_name, suffix="", ckpt_path=None):
-        if not os.path.exists('checkpoints/'):
-            os.makedirs('checkpoints/')
+        if not os.path.exists('weight/'):
+            os.makedirs('weight/')
         if ckpt_path is None:
             ckpt_path = "checkpoints/sac_checkpoint_{}_{}".format(env_name, suffix)
         print('Saving models to {}'.format(ckpt_path))

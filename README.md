@@ -1,2 +1,7 @@
 # Unicycle-with-soft-arcto-critic
- Paper reproduction/CS443 project
+
+Train model
+    `python main.py --mode train`
+
+Test model
+    `python main.py --mode test --load_model weight/weight.pth`

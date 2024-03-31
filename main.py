@@ -20,7 +20,7 @@ parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                     help='discount factor for reward (default: 0.99)')
 parser.add_argument('--tau', type=float, default=0.005, metavar='G',
                     help='target smoothing coefficient(τ) (default: 0.005)')
-parser.add_argument('--lr', type=float, default=0.0003, metavar='G',
+parser.add_argument('--lr', type=float, default=0.0004, metavar='G',
                     help='learning rate (default: 0.0003)')
 parser.add_argument('--alpha', type=float, default=0.2, metavar='G',
                     help='Temperature parameter α determines the relative importance of the entropy\
@@ -45,6 +45,10 @@ parser.add_argument('--replay_size', type=int, default=1000000, metavar='N',
                     help='size of replay buffer (default: 10000000)')
 parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
+parser.add_argument('--mode', default='train', type=str,
+                    help='support option: train/test')
+parser.add_argument('--load_model', default='',
+                    help='model path')
 args = parser.parse_args()
 
 # Environment
@@ -59,89 +63,104 @@ np.random.seed(args.seed)
 # Agent, it include the initialization of the Q, Q', and policy networks
 agent = SAC(env.observation_space.shape[0], env.action_space, args)
 
-#Tesnorboard
-writer = SummaryWriter('runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
-                                                             args.policy, "autotune" if args.automatic_entropy_tuning else ""))
+if args.mode == 'train':
+    #Tesnorboard
+    writer = SummaryWriter('runs/{}_SAC_{}_{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"), args.env_name,
+                                                                args.policy, "autotune" if args.automatic_entropy_tuning else ""))
 
-# Memory for Experience Replay
-memory = ReplayMemory(args.replay_size, args.seed)
+    # Memory for Experience Replay
+    memory = ReplayMemory(args.replay_size, args.seed)
 
-# Training Loop
-total_numsteps = 0
-updates = 0
+    # Training Loop
+    total_numsteps = 0
+    updates = 0
+    # Generate a iteration object to continuous generate numbers
+    for i_episode in itertools.count(1):
+        episode_reward = 0
+        episode_steps = 0
+        done = False
+        state = env.reset()
 
-# Generate a iteration object to continuous generate numbers
-for i_episode in itertools.count(1):
-    episode_reward = 0
-    episode_steps = 0
+        while not done:
+            # start_steps is the number of steps to take random actions: Get initial data
+            if args.start_steps > total_numsteps:
+                action = env.action_space.sample()  # Sample random action
+            else:
+                action = agent.select_action(state)  # Sample action from policy
+
+            # When we get enough data, we start to update the network
+            if len(memory) > args.batch_size:
+                # Number of updates per step in environment
+                for i in range(args.updates_per_step):
+                    # Update parameters of all the networks
+                    critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = agent.update_parameters(memory, args.batch_size, updates)
+                    writer.add_scalar('loss/critic_1', critic_1_loss, updates)
+                    writer.add_scalar('loss/critic_2', critic_2_loss, updates)
+                    writer.add_scalar('loss/policy', policy_loss, updates)
+                    writer.add_scalar('loss/entropy_loss', ent_loss, updates)
+                    writer.add_scalar('entropy_temprature/alpha', alpha, updates)
+                    updates += 1
+            next_state, reward, done, _ = env.step(action) # Step
+            episode_steps += 1
+            total_numsteps += 1
+            episode_reward += reward
+
+            # Ignore the "done" signal if it comes from hitting the time horizon.
+            # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
+            mask = 1 if episode_steps == env.max_episode_step else float(not done)
+            # print("mask: ", done)
+            memory.push(state, action, reward, next_state, mask) # Append transition to memory
+
+            state = next_state
+
+        if total_numsteps > args.num_steps:
+            break
+        writer.add_scalar('reward/train', episode_reward, i_episode)
+        print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2)))
+
+        # Every 10 episodes, evaluate the current policy /Just for visulize/
+        if i_episode % 10 == 0 and args.eval is True:
+            avg_reward = 0.
+            episodes = 10
+            # env.render_init()
+            env.render_flag = True
+            for _ in range(episodes):
+                state = env.reset(rand_init=False)
+                episode_reward = 0
+                done = False
+                while not done:               
+                    env.render_save()
+                    action = agent.select_action(state, evaluate=True)
+                    next_state, reward, done, _ = env.step(action)
+                    episode_reward += reward
+                    state = next_state
+                avg_reward += episode_reward
+            avg_reward /= episodes
+            env.render_flag = False
+            agent.save_checkpoint("unicycle",ckpt_path = 'weight/weight_with_average_reward' + str(int(avg_reward)) + '.pth')
+            env.render_activate()   # Only for the last episode
+            writer.add_scalar('avg_reward/test', avg_reward, i_episode)
+
+            print("----------------------------------------")
+            print("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
+            print("----------------------------------------")
+else:
+    agent.load_checkpoint(args.load_model,evaluate=True)
+    test_reward = 0
+    env.render_flag = True
+    state = env.reset(rand_init=False)
     done = False
-    state = env.reset()
-
     while not done:
-        # start_steps is the number of steps to take random actions: Get initial data
-        if args.start_steps > total_numsteps:
-            action = env.action_space.sample()  # Sample random action
-        else:
-            action = agent.select_action(state)  # Sample action from policy
-
-        # When we get enough data, we start to update the network
-        if len(memory) > args.batch_size:
-            # Number of updates per step in environment
-            for i in range(args.updates_per_step):
-                # Update parameters of all the networks
-                critic_1_loss, critic_2_loss, policy_loss, ent_loss, alpha = agent.update_parameters(memory, args.batch_size, updates)
-
-                writer.add_scalar('loss/critic_1', critic_1_loss, updates)
-                writer.add_scalar('loss/critic_2', critic_2_loss, updates)
-                writer.add_scalar('loss/policy', policy_loss, updates)
-                writer.add_scalar('loss/entropy_loss', ent_loss, updates)
-                writer.add_scalar('entropy_temprature/alpha', alpha, updates)
-                updates += 1
-
-        next_state, reward, done, _ = env.step(action) # Step
-        episode_steps += 1
-        total_numsteps += 1
-        episode_reward += reward
-
-        # Ignore the "done" signal if it comes from hitting the time horizon.
-        # (https://github.com/openai/spinningup/blob/master/spinup/algos/sac/sac.py)
-        mask = 1 if episode_steps == env.max_episode_step else float(not done)
-        # print("mask: ", done)
-        memory.push(state, action, reward, next_state, mask) # Append transition to memory
-
+        env.render_save()
+        action = agent.select_action(state, evaluate=True)
+        next_state, reward, done, _ = env.step(action)
+        test_reward += reward
         state = next_state
-
-    if total_numsteps > args.num_steps:
-        break
-
-    writer.add_scalar('reward/train', episode_reward, i_episode)
-    print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2)))
-
-    # Every 10 episodes, evaluate the current policy /Just for visulize/
-    if i_episode % 10 == 0 and args.eval is True:
-        avg_reward = 0.
-        episodes = 10
-        # env.render_init()
-        env.render_flag = True
-        for _ in range(episodes):
-            state = env.reset()
-            episode_reward = 0
-            done = False
-            while not done:               
-                env.render_save()
-                action = agent.select_action(state, evaluate=True)
-                next_state, reward, done, _ = env.step(action)
-                episode_reward += reward
-                state = next_state
-            avg_reward += episode_reward
-        env.render_activate()   # Only for the last episode
-        avg_reward /= episodes
-        env.render_flag = False
-        writer.add_scalar('avg_reward/test', avg_reward, i_episode)
-
-        print("----------------------------------------")
-        print("Test Episodes: {}, Avg. Reward: {}".format(episodes, round(avg_reward, 2)))
-        print("----------------------------------------")
+    env.render_activate()
+    env.render_flag = False
+    print("----------------------------------------")
+    print("Reward: {}".format(test_reward))
+    print("----------------------------------------")
 
 env.close()
 
