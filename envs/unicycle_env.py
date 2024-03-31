@@ -76,7 +76,7 @@ class UnicycleEnv(gym.Env):
         self.goal_pos = [self.circle_r * np.cos(self.speed * np.pi/5 * self.episode_step * self.dt + self.initial_angle), self.circle_r * np.sin(self.speed * np.pi/5 * self.episode_step * self.dt + self.initial_angle)]
         
         # Check if the episode is done
-        done = self.episode_step >= 2000
+        done = self.episode_step >= 2500
         
         return self.get_obs(), reward, done, info  
     
