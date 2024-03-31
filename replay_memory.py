@@ -3,6 +3,7 @@ import numpy as np
 import os
 import pickle
 
+
 class ReplayMemory:
     def __init__(self, capacity, seed):
         random.seed(seed)
