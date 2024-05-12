@@ -19,7 +19,7 @@ class UnicycleEnv(gym.Env):
         self.observation_space = spaces.Box(low=-1e10, high=1e10, shape=(7,), dtype=np.float32)
         
         self.dt = 0.02
-        self.max_episode_step = 5000
+        self.max_episode_steps = 5000
         # self.reward_goal = 1.0
         
         self.goal_pos = None
